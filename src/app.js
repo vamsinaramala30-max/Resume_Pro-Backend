@@ -49,6 +49,10 @@ app.use(
       if (!origin) return callback(null, true);
       if (isDev) return callback(null, true);
       if (allowedOrigins.includes(origin)) return callback(null, true);
+      // Allow dynamic Vercel preview environments
+      if (/^https:\/\/.*\.vercel\.app$/.test(origin)) {
+        return callback(null, true);
+      }
       return callback(new Error(`CORS blocked the request from ${origin}`));
     },
     credentials: true,
