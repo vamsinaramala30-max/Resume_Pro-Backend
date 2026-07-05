@@ -1,156 +1,121 @@
-import express from "express";
-import cors from "cors";
-import dotenv from "dotenv";
-import dns from "dns";
-import { createServer } from "net";
+export * from './config/env.js';
 
-// DB
-import connectDB from "./config/db.js";
+import express from 'express';
+import cors from 'cors';
+import helmet from 'helmet';
+import cookieParser from 'cookie-parser';
+import logEvent from './shared/logging/logger.js';
+import { sanitizeInput } from './middleware/validate.js';
+import errorHandler from './middleware/errorHandler.js';
+
+import { isSupabaseConfigured } from './config/supabase.js';
+import { isRazorpayConfigured } from './config/razorpay.js';
+import { isEmailConfigured } from './config/email.js';
+import { printConfigStatus } from './config/env.js';
 
 // ROUTES
-import authRoutes from "./routes/auth.js";
-import resumeRoutes from "./routes/resume.js";
-import paymentRoutes from "./routes/payment.js";
-import aiRoutes from "./routes/ai.js";
-import adminRoutes from "./routes/admin.js";
+import authRoutes from './routes/auth.js';
+import resumeRoutes from './routes/resume.js';
+import paymentRoutes from './routes/payment.js';
+import aiRoutes from './routes/ai.js';
+import adminRoutes from './routes/admin.js';
+import subscriberRoutes from './routes/subscriber.js';
+import contactRoutes from './routes/contact.js';
 
-// ================= ENV =================
-dotenv.config({ override: true });
-
-// ================= DNS FIX FOR MONGODB ATLAS =================
-dns.setDefaultResultOrder("ipv4first");
-
+const configStatus = printConfigStatus();
 const app = express();
 
-// ================= SECURITY + MIDDLEWARE =================
-const allowedOrigins = [
-  process.env.FRONTEND_URL,
-  "http://localhost:4173",
-  "http://127.0.0.1:4173",
-  "http://localhost:4174",
-  "http://127.0.0.1:4174",
-  "http://localhost:3000",
-  "http://127.0.0.1:3000",
-].filter(Boolean);
-
-const isDev = process.env.NODE_ENV !== "production";
-
-app.use(
-  cors({
-    origin: (origin, callback) => {
-      if (!origin) return callback(null, true);
-
-      if (isDev) return callback(null, true);
-
-      if (allowedOrigins.includes(origin)) {
-        return callback(null, true);
-      }
-
-      return callback(
-        new Error(`CORS blocked the request from ${origin}`)
-      );
+// ================= SECURITY headers =================
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'", 'https://cdn.jsdelivr.net'],
+      styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
+      fontSrc: ["'self'", 'https://fonts.gstatic.com'],
+      imgSrc: ["'self'", 'data:', 'https:'],
+      connectSrc: ["'self'", 'https://api.openai.com'],
     },
-    credentials: true,
-  })
-);
+  },
+  crossOriginEmbedderPolicy: false,
+}));
 
-app.use(express.json());
+app.use(cors({
+  origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+  credentials: true,
+}));
 
-// ================= ROOT =================
-app.get("/", (req, res) => {
-  res.send("🚀 Resume PRO Backend Running");
-});
+// ================= CRITICAL HOOK ORDER FIX =================
+// Razorpay webhooks need raw body parsing BEFORE express.json middleware captures payloads
+app.use('/api/payment/webhook', express.raw({ type: 'application/json' }));
 
-// ================= HEALTH CHECK =================
-app.get("/api/test", (req, res) => {
-  res.json({
-    status: "success",
-    message: "Backend working ✅",
-    time: new Date(),
-  });
-});
+app.use(express.json({ limit: '100kb' }));
+app.use(express.urlencoded({ extended: true, limit: '100kb' }));
+app.use(cookieParser());
 
-// ================= API ROUTES =================
-app.use("/api/auth", authRoutes);
-app.use("/api/resume", resumeRoutes);
-app.use("/api/payment", paymentRoutes);
-app.use("/api/ai", aiRoutes);
-app.use("/api/admin", adminRoutes);
+app.use(sanitizeInput);
 
-// ================= 404 HANDLER =================
-app.use((req, res) => {
-  res.status(404).json({
-    error: "Route not found ❌",
-    path: req.originalUrl,
-  });
-});
-
-// ================= GLOBAL ERROR HANDLER =================
-app.use((err, req, res, next) => {
-  console.error("🔥 ERROR:", err.stack);
-
-  res.status(500).json({
-    error: "Internal Server Error",
-    message: err.message,
-  });
-});
-
-// ================= AUTO-FIND FREE PORT =================
-const findFreePort = (startPort = 5000, maxAttempts = 20) => {
-  return new Promise((resolve, reject) => {
-    const tryPort = (port) => {
-      if (port > startPort + maxAttempts) {
-        reject(
-          new Error(
-            `No free ports available between ${startPort} and ${
-              startPort + maxAttempts
-            }`
-          )
-        );
-        return;
-      }
-
-      const server = createServer();
-
-      server.once("error", (err) => {
-        if (err.code === "EADDRINUSE") {
-          tryPort(port + 1);
-        } else {
-          reject(err);
+// Security Analytics logging
+app.use((req, res, next) => {
+  const start = Date.now();
+  res.on('finish', () => {
+    const duration = Date.now() - start;
+    if (res.statusCode >= 400 && req.path.includes('/auth')) {
+      logEvent({
+        level: 'warn',
+        message: `Security Warning: ${req.method} ${req.path}`,
+        extra: {
+          ip: req.ip || req.headers['x-forwarded-for'] || 'unknown',
+          status: res.statusCode,
+          userAgent: req.headers['user-agent'] || 'unknown',
+          duration,
         }
       });
-
-      server.once("listening", () => {
-        server.close();
-        resolve(port);
-      });
-
-      server.listen(port, "0.0.0.0");
-    };
-
-    tryPort(startPort);
+    }
   });
-};
+  next();
+});
 
-// ================= START SERVER =================
-const startServer = async () => {
-  try {
-    // CONNECT DATABASE
-    await connectDB();
+// ================= SERVICE STATUS LOGS =================
+console.log(`[Status] Supabase: ${isSupabaseConfigured() ? 'Connected' : 'Disabled'}`);
+console.log(`[Status] Razorpay: ${isRazorpayConfigured() ? 'Connected' : 'Disabled'}`);
+console.log(`[Status] Email: ${isEmailConfigured() ? 'Connected' : 'Disabled'}`);
 
-    const desiredPort = parseInt(process.env.PORT || "5000", 10);
+// ================= API PLUGINS ROUTES =================
+app.use('/api/auth', authRoutes);
+app.use('/api/resume', resumeRoutes);
+app.use('/api/payment', paymentRoutes);
+app.use('/api/ai', aiRoutes);
+app.use('/api/admin', adminRoutes);
+app.use('/api/subscribe', subscriberRoutes);
+app.use('/api/contact', contactRoutes);
 
-    const port = await findFreePort(desiredPort);
+app.get('/', (req, res) => res.send('Resume PRO Backend Running'));
 
-    app.listen(port, "0.0.0.0", () => {
-      console.log(`\n✅ Server running on http://localhost:${port}`);
-      console.log(`📡 API Base: http://localhost:${port}/api`);
-      console.log(`✅ MongoDB Connected Successfully\n`);
-    });
-  } catch (err) {
-    console.error("❌ Startup failed:", err.message);
-    process.exit(1);
-  }
-};
+app.get('/api/health', (req, res) => {
+  res.json({
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    services: {
+      supabase: isSupabaseConfigured(),
+      razorpay: isRazorpayConfigured(),
+      email: isEmailConfigured()
+    }
+  });
+});
 
-startServer();
+app.get('/api/test', (req, res) => {
+  res.json({ status: 'success', message: 'Backend working', time: new Date() });
+});
+
+app.use((req, res) => {
+  res.status(404).json({ error: 'Route not found', path: req.originalUrl });
+});
+
+// Errors parsing boundary pipeline handler
+app.use(errorHandler);
+
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, '0.0.0.0', () => {
+  console.log('Server successfully deployed running on port ' + PORT);
+});
