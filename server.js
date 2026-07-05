@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 export * from './config/env.js';
 
 import express from 'express';
@@ -9,6 +8,7 @@ import logEvent from './shared/logging/logger.js';
 import { sanitizeInput } from './middleware/validate.js';
 import errorHandler from './middleware/errorHandler.js';
 
+import connectDB from './config/db.js';
 import { isSupabaseConfigured } from './config/supabase.js';
 import { isRazorpayConfigured } from './config/razorpay.js';
 import { isEmailConfigured } from './config/email.js';
@@ -24,6 +24,9 @@ import subscriberRoutes from './routes/subscriber.js';
 import contactRoutes from './routes/contact.js';
 
 const configStatus = printConfigStatus();
+if (process.env.MONGO_URI) {
+  connectDB().catch(console.error);
+}
 const app = express();
 
 // ================= SECURITY headers =================
@@ -120,28 +123,3 @@ const PORT = process.env.PORT || 5000;
 app.listen(PORT, '0.0.0.0', () => {
   console.log('Server successfully deployed running on port ' + PORT);
 });
-=======
-import app from "./src/app.js";
-
-// Server bootstrap kept in root for backward-compatible entrypoint
-const isDev = process.env.NODE_ENV !== "production";
-
-const desiredPort = parseInt(process.env.PORT || "5000", 10);
-
-app
-  .listen(desiredPort, "0.0.0.0", () => {
-    console.log(`\n✅ Server running on port ${desiredPort}`);
-    console.log(`📡 API Base: http://localhost:${desiredPort}/api\n`);
-
-    if (isDev) {
-      console.log("🛠️  DEV mode: CORS is permissive.");
-    } else {
-      console.log("🚀 PRODUCTION mode: Enforcing secure CORS and optimizations.");
-    }
-  })
-  .on("error", (err) => {
-    console.error("❌ Failed to start server:", err.message);
-    process.exit(1);
-  });
-
->>>>>>> 03cc98920cc6b02cf30daba9b24f932ed7cd10ee

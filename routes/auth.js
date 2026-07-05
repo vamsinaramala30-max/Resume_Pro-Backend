@@ -10,7 +10,7 @@ import asyncHandler from "../middleware/asyncHandler.js";
 import authMiddleware from "../middleware/auth.js";
 import AppError from "../shared/errors/AppError.js";
 import { sendVerifyEmailOtp, sendForgotPasswordOtp } from "../email/index.js";
-import { hashToken, hashString, createTokens, clearAuthCookies } from "../services/authTokens.js";
+import { hashToken, hashString, createTokens, clearAuthCookies, cookieOptions } from "../services/authTokens.js";
 import {
   generateOtp6,
   hashOtp,
@@ -41,6 +41,9 @@ const MAX_FAILED_ATTEMPTS = 5;
 
 // High-performance Rate Limiter Utility
 function checkRateLimit(key, maxAttempts = 5, windowMs = 15 * 60 * 1000) {
+  if (process.env.NODE_ENV !== "production") {
+    return { allowed: true, remaining: 999 };
+  }
   const now = Date.now();
   const record = rateLimitStore.get(key);
 
@@ -60,6 +63,9 @@ function checkRateLimit(key, maxAttempts = 5, windowMs = 15 * 60 * 1000) {
 
 // Lockout verification engine
 function checkAccountLockout(email) {
+  if (process.env.NODE_ENV !== "production") {
+    return { locked: false };
+  }
   const lockout = accountLockoutStore.get(email);
   if (!lockout) return { locked: false };
 
@@ -185,9 +191,7 @@ router.post(
     const { accessToken, refreshToken } = createTokens(user.id, email, JWT_SECRET, JWT_REFRESH_SECRET);
 
     res.cookie("refreshToken", refreshToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
+      ...cookieOptions,
       maxAge: 7 * 24 * 60 * 60 * 1000, 
     });
 
@@ -409,9 +413,7 @@ router.post(
 
     const maxAge = rememberMe ? 30 * 24 * 60 * 60 * 1000 : 7 * 24 * 60 * 60 * 1000;
     res.cookie("refreshToken", refreshToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
+      ...cookieOptions,
       maxAge,
     });
 
@@ -545,9 +547,7 @@ router.post(
 
     const maxAge = rememberMe ? 30 * 24 * 60 * 60 * 1000 : 7 * 24 * 60 * 60 * 1000;
     res.cookie("refreshToken", refreshToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
+      ...cookieOptions,
       maxAge,
     });
 
@@ -733,9 +733,7 @@ router.post("/refresh", asyncHandler(async (req, res) => {
   );
 
   res.cookie("refreshToken", newRefreshToken, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
+    ...cookieOptions,
     maxAge: 7 * 24 * 60 * 60 * 1000,
   });
 

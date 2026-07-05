@@ -7,6 +7,14 @@ function requireEnv(name) {
   return v;
 }
 
+export const cookieOptions = {
+  httpOnly: true,
+  secure: process.env.NODE_ENV === "production" || process.env.COOKIE_SECURE === "true",
+  sameSite: process.env.COOKIE_SAME_SITE || "strict",
+  maxAge: 7 * 24 * 60 * 60 * 1000,
+  domain: process.env.COOKIE_DOMAIN || undefined,
+};
+
 export function signAccessToken({ userId, role }) {
   const secret = requireEnv("JWT_SECRET");
   const expiresIn = process.env.JWT_ACCESS_TTL || "15m";
@@ -49,10 +57,7 @@ export function hashToken(token) {
 // Clear auth cookies
 export function clearAuthCookies(res) {
   res.cookie("refreshToken", "", {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
+    ...cookieOptions,
     maxAge: 0,
   });
 }
-

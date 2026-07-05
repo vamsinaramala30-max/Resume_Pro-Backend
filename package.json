@@ -1,5 +1,4 @@
 {
-<<<<<<< HEAD
     "name": "resume-pro-backend",
     "version": "1.0.0",
     "description": "Resume Builder Backend API",
@@ -18,64 +17,30 @@
     "author": "vkgroups",
     "license": "ISC",
     "dependencies": {
+        "@supabase/supabase-js": "^2.45.0",
         "bcryptjs": "^2.4.3",
         "better-sqlite3": "^11.8.1",
+        "compression": "^1.7.4",
         "cookie-parser": "^1.4.7",
         "cors": "^2.8.6",
         "crypto-js": "^4.2.0",
         "dotenv": "^16.6.1",
         "express": "^4.22.1",
+        "express-mongo-sanitize": "^2.2.0",
         "express-rate-limit": "^8.5.2",
         "helmet": "^8.2.0",
         "jsonwebtoken": "^9.0.3",
-        "@supabase/supabase-js": "^2.45.0",
-        "resend": "^3.5.0",
+        "mongoose": "^8.23.0",
         "openai": "^6.45.0",
+        "pino": "^9.2.0",
+        "pino-http": "^10.3.0",
         "razorpay": "^2.9.6",
+        "resend": "^3.5.0",
         "uuid": "^9.0.1",
+        "xss-clean": "^0.1.4",
         "zod": "^4.4.3"
     },
     "devDependencies": {
         "nodemon": "^3.0.0"
     }
-=======
-  "name": "resume-pro-backend",
-  "version": "1.0.0",
-  "description": "Resume Builder Backend API",
-  "type": "module",
-  "main": "server.js",
-  "scripts": {
-    "dev": "nodemon server.js",
-    "start": "node server.js"
-  },
-  "keywords": [
-    "node",
-    "express",
-    "resume",
-    "api"
-  ],
-  "author": "vkgroups",
-  "license": "ISC",
-  "dependencies": {
-    "bcryptjs": "^2.4.3",
-    "compression": "^1.7.4",
-    "cors": "^2.8.6",
-    "dotenv": "^16.6.1",
-    "express": "^4.22.1",
-    "express-mongo-sanitize": "^2.2.0",
-    "express-rate-limit": "^7.5.0",
-    "helmet": "^7.1.0",
-    "jsonwebtoken": "^9.0.3",
-    "mongoose": "^8.23.0",
-    "pino": "^9.2.0",
-    "pino-http": "^10.3.0",
-    "razorpay": "^2.9.6",
-    "uuid": "^9.0.1",
-    "xss-clean": "^0.1.4",
-    "zod": "^3.24.1"
-  },
-  "devDependencies": {
-    "nodemon": "^3.0.0"
-  }
->>>>>>> 03cc98920cc6b02cf30daba9b24f932ed7cd10ee
 }
