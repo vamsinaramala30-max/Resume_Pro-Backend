@@ -1,3 +1,10 @@
 .env
+<<<<<<< HEAD
 node_modules
 build
+=======
+.env.local
+.env.*
+TODO.md
+node_modules
+>>>>>>> 03cc98920cc6b02cf30daba9b24f932ed7cd10ee
