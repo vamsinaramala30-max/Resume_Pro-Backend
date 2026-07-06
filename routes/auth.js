@@ -152,41 +152,24 @@ router.post(
       });
     }
 
-    const passwordHash = await bcrypt.hash(password, 12);
+        const passwordHash = await bcrypt.hash(password, 12);
     
-    // Utilizing integrated utility framework service functions safely
-    const otp = generateOtp6 ? generateOtp6() : String(crypto.randomInt(100000, 999999));
-    const otpHash = hashOtp ? await hashOtp(otp) : await bcrypt.hash(otp, 12);
-    const otpExpires = new Date(Date.now() + 10 * 60 * 1000); 
-
     const user = await users.create({
       name,
       email,
       password: passwordHash,
       provider: "email",
-      isVerified: false,
-      emailVerified: false,
+      isVerified: true,
+      emailVerified: true,
       plan: "FREE",
       subscriptionStatus: "inactive",
-      emailOtpHash: otpHash,
-      emailOtpExpiresAt: otpExpires,
+      emailOtpHash: null,
+      emailOtpExpiresAt: null,
       emailOtpAttempts: 0,
-      emailOtpLastSentAt: new Date(),
+      emailOtpLastSentAt: null,
     });
 
     logEvent({ level: "info", message: `New user registered: ${email}` });
-
-    try {
-      await sendVerifyEmailOtp({ toEmail: email, otp });
-      logEvent({ level: "info", message: `Verification OTP sent to: ${email}` });
-    } catch (err) {
-      logEvent({ level: "error", message: `Failed to send verification email: ${err.message}`, extra: { email } });
-      throw new AppError({
-        statusCode: 502,
-        code: "EMAIL_DELIVERY_FAILED",
-        message: "Unable to deliver verification code. Please try again.",
-      });
-    }
 
     const { accessToken, refreshToken } = createTokens(user.id, email, JWT_SECRET, JWT_REFRESH_SECRET);
 
@@ -197,7 +180,7 @@ router.post(
 
     res.json({
       ok: true,
-      needsVerification: true, 
+      needsVerification: false, 
       token: accessToken,
       user: {
         id: user.id,
