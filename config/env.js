@@ -1,6 +1,7 @@
 import dotenv from 'dotenv';
 
-// Load .env file FIRST, before any other imports can access process.env
+// Load .env files, loading .env.local first to let it override .env
+dotenv.config({ path: '.env.local' });
 const result = dotenv.config({ path: '.env' });
 
 if (result.error) {
@@ -21,6 +22,13 @@ function validateRequired() {
   const missing = [];
   if (!hasEnv('JWT_SECRET')) missing.push('JWT_SECRET');
   if (!hasEnv('JWT_REFRESH_SECRET')) missing.push('JWT_REFRESH_SECRET');
+  if (!hasEnv('SUPABASE_URL')) missing.push('SUPABASE_URL');
+  if (!hasEnv('SUPABASE_SERVICE_ROLE_KEY')) missing.push('SUPABASE_SERVICE_ROLE_KEY');
+
+  if (missing.length > 0) {
+    console.error(`[FATAL] Missing required environment variables: ${missing.join(', ')}`);
+    process.exit(1);
+  }
   return missing;
 }
 

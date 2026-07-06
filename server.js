@@ -8,7 +8,7 @@ import logEvent from './shared/logging/logger.js';
 import { sanitizeInput } from './middleware/validate.js';
 import errorHandler from './middleware/errorHandler.js';
 
-import connectDB from './config/db.js';
+
 import { isSupabaseConfigured } from './config/supabase.js';
 import { isRazorpayConfigured } from './config/razorpay.js';
 import { isEmailConfigured } from './config/email.js';
@@ -23,10 +23,7 @@ import adminRoutes from './routes/admin.js';
 import subscriberRoutes from './routes/subscriber.js';
 import contactRoutes from './routes/contact.js';
 
-const configStatus = printConfigStatus();
-if (process.env.MONGO_URI) {
-  connectDB().catch(console.error);
-}
+printConfigStatus();
 const app = express();
 
 // ================= SECURITY headers =================
