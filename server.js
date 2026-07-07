@@ -7,7 +7,8 @@ import cookieParser from 'cookie-parser';
 import logEvent from './shared/logging/logger.js';
 import { sanitizeInput } from './middleware/validate.js';
 import errorHandler from './middleware/errorHandler.js';
-
+import requestIdMiddleware from './middleware/requestId.js';
+import requestLoggingMiddleware from './middleware/logging.js';
 
 import { isSupabaseConfigured } from './config/supabase.js';
 import { isRazorpayConfigured } from './config/razorpay.js';
@@ -56,6 +57,11 @@ app.use(cookieParser());
 
 app.use(sanitizeInput);
 
+// Request tracing (requestId) + structured logging
+app.use(requestIdMiddleware);
+app.use(requestLoggingMiddleware);
+
+
 // Security Analytics logging
 app.use((req, res, next) => {
   const start = Date.now();
@@ -70,12 +76,14 @@ app.use((req, res, next) => {
           status: res.statusCode,
           userAgent: req.headers['user-agent'] || 'unknown',
           duration,
+          requestId: req.requestId,
         }
       });
     }
   });
   next();
 });
+
 
 // ================= SERVICE STATUS LOGS =================
 console.log(`[Status] Supabase: ${isSupabaseConfigured() ? 'Connected' : 'Disabled'}`);
@@ -116,7 +124,129 @@ app.use((req, res) => {
 // Errors parsing boundary pipeline handler
 app.use(errorHandler);
 
-const PORT = process.env.PORT || 5000;
-app.listen(PORT, '0.0.0.0', () => {
-  console.log('Server successfully deployed running on port ' + PORT);
+function toPort(value, fallback) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return fallback;
+  if (n <= 0) return fallback;
+  if (n >= 65536) return fallback;
+  return n;
+}
+
+function tryListenOnce(serverInstance, port, host) {
+  return new Promise((resolve, reject) => {
+    const onError = (err) => {
+      cleanup();
+      reject(err);
+    };
+    const onListening = () => {
+      cleanup();
+      resolve();
+    };
+
+    const cleanup = () => {
+      serverInstance.off('error', onError);
+      serverInstance.off('listening', onListening);
+    };
+
+    serverInstance.once('error', onError);
+    serverInstance.once('listening', onListening);
+
+    serverInstance.listen(port, host);
+  });
+}
+
+async function listenOnAvailablePort({ httpApp, startPort, host, maxTries = 50 }) {
+  let port = startPort;
+
+  for (let i = 0; i < maxTries; i++) {
+    // createServer ensures we only bind once per attempt
+    const serverInstance = (await import('http')).default.createServer(httpApp);
+    try {
+      await tryListenOnce(serverInstance, port, host);
+      return { server: serverInstance, port };
+    } catch (err) {
+      if (err?.code === 'EADDRINUSE' || /EADDRINUSE/i.test(String(err?.message || ''))) {
+        console.warn(`[server] Port ${port} already in use. Trying ${port + 1}...`);
+        try { serverInstance.close(); } catch (_) { /* ignore */ }
+        port = port + 1;
+        continue;
+      }
+
+      try { serverInstance.close(); } catch (_) { /* ignore */ }
+      throw err;
+    }
+  }
+
+  throw new Error(`Could not find an available port starting from ${startPort}`);
+}
+
+const host = process.env.HOST || '0.0.0.0';
+const basePort = toPort(process.env.PORT, 5000);
+const startedAt = Date.now();
+
+let server;
+let selectedPort;
+
+const { default: http } = await import('http');
+const result = await (async () => {
+  let port = basePort;
+  for (let i = 0; i < 50; i++) {
+    const serverInstance = http.createServer(app);
+    try {
+      await tryListenOnce(serverInstance, port, host);
+      return { server: serverInstance, port };
+    } catch (err) {
+      if (err?.code === 'EADDRINUSE' || /EADDRINUSE/i.test(String(err?.message || ''))) {
+        console.warn(`[server] Port ${port} already in use. Trying ${port + 1}...`);
+        try { serverInstance.close(); } catch (_) { /* ignore */ }
+        port = port + 1;
+        continue;
+      }
+      try { serverInstance.close(); } catch (_) { /* ignore */ }
+      throw err;
+    }
+  }
+  throw new Error(`Could not find an available port starting from ${basePort}`);
+})();
+
+server = result.server;
+selectedPort = result.port;
+process.env.PORT = String(selectedPort);
+
+console.log(`[server] Server successfully started on port ${selectedPort} (host: ${host}). Startup time: ${Date.now() - startedAt}ms`);
+
+server.on('error', (err) => {
+  console.error('[server] Unhandled server error after startup:', err);
 });
+
+function setupGracefulShutdown(serverInstance) {
+  if (!serverInstance) return;
+  let isShuttingDown = false;
+
+  const shutdown = async (signal) => {
+    if (isShuttingDown) return;
+    isShuttingDown = true;
+
+    console.log(`[server] Received ${signal}. Closing HTTP server...`);
+
+    try {
+      await new Promise((resolve) => {
+        serverInstance.close(() => resolve());
+      });
+
+      setTimeout(() => {
+        console.log('[server] Shutdown timeout reached; exiting.');
+        process.exit(0);
+      }, 2000);
+    } catch (err) {
+      console.error('[server] Error during shutdown:', err);
+      process.exit(1);
+    }
+  };
+
+  process.on('SIGINT', shutdown);
+  process.on('SIGTERM', shutdown);
+}
+
+setupGracefulShutdown(server);
+

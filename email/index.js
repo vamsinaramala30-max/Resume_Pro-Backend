@@ -30,6 +30,7 @@ function getSenderEmail() {
 }
 
 async function renderTemplate(templateFile, vars) {
+
   const fullPath = path.join(__dirname, "templates", templateFile);
   let html = await fs.readFile(fullPath, "utf8");
   for (const [k, v] of Object.entries(vars)) {
@@ -46,18 +47,19 @@ function generateSecureOTP() {
 export async function sendVerifyEmailOtp({ toEmail, otp }) {
   console.log("[email] ===== SEND VERIFY EMAIL OTP =====");
   console.log("[email] To:", toEmail);
-  console.log("[email] OTP:", otp);
 
   const isMock = !resend || !resendKey || resendKey.startsWith("re_12345") || resendKey === "your_resend_api_key";
   if (isMock) {
-    console.log("[email] [DEV MODE] Simulated email verification successfully sent to:", toEmail);
-    return { data: { id: "mock-verify-id" }, error: null };
+    // Preserve API contract (caller expects success/error), but do not silently succeed.
+    // Throw so the auth route can return EMAIL_DELIVERY_FAILED.
+    throw new Error('Email provider not configured (RESEND_API_KEY missing/placeholder).');
   }
 
   const from = getSenderEmail();
   const html = await renderTemplate("verifyEmailOtp.html", { OTP: otp });
 
   try {
+
     const result = await resend.emails.send({
       from,
       to: toEmail,
@@ -86,11 +88,11 @@ export async function sendSubscriptionConfirmationEmail({ toEmail, name }) {
 
   const isMock = !resend || !resendKey || resendKey.startsWith("re_12345") || resendKey === "your_resend_api_key";
   if (isMock) {
-    console.log("[email] [DEV MODE] Simulated subscription confirmation successfully sent to:", toEmail);
-    return { data: { id: "mock-subscription-id" }, error: null };
+    throw new Error('Email provider not configured (RESEND_API_KEY missing/placeholder).');
   }
 
   const from = getSenderEmail();
+
   const html = await renderTemplate("subscriptionConfirm.html", { NAME: name || "Subscriber" });
 
   try {
@@ -120,16 +122,16 @@ export async function sendSubscriptionConfirmationEmail({ toEmail, name }) {
 export async function sendForgotPasswordOtp({ toEmail, otp }) {
   console.log("[email] ===== SEND FORGOT PASSWORD OTP =====");
   console.log("[email] To:", toEmail);
-  console.log("[email] OTP:", otp);
 
   const isMock = !resend || !resendKey || resendKey.startsWith("re_12345") || resendKey === "your_resend_api_key";
   if (isMock) {
-    console.log("[email] [DEV MODE] Simulated password reset email successfully sent to:", toEmail);
-    return { data: { id: "mock-forgot-id" }, error: null };
+    throw new Error('Email provider not configured (RESEND_API_KEY missing/placeholder).');
   }
 
   const from = getSenderEmail();
+
   const html = await renderTemplate("forgotPasswordOtp.html", { OTP: otp });
+
 
   try {
     const result = await resend.emails.send({

@@ -54,9 +54,23 @@ router.post("/chat", async (req, res) => {
       ? "AI service is temporarily unavailable"
       : "Unable to get AI response. Please try again.";
 
-    res.status(status).json({ error: errorMessage, message: err.message });
+    // Ensure status mapping: don't leak internals, but also don't mislabel OpenAI config issues as 500.
+    let mappedStatus = status;
+    const msgLower = (err?.message || '').toLowerCase();
+    const codeLower = (err?.code || '').toLowerCase();
+
+    if (mappedStatus >= 500) {
+      if (msgLower.includes('invalid openai') || msgLower.includes('api key') || codeLower.includes('invalid') || codeLower.includes('authentication')) {
+        mappedStatus = 401;
+      } else if (msgLower.includes('model') || msgLower.includes('not found') || msgLower.includes('permission') || msgLower.includes('access')) {
+        mappedStatus = 503;
+      }
+    }
+
+    res.status(mappedStatus).json({ error: errorMessage, message: err.message });
   }
 });
+
 
 // Streaming chat endpoint
 router.post("/stream", async (req, res) => {

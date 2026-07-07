@@ -84,13 +84,47 @@ export async function chat(messages, resumeContext = {}) {
       const timeoutMs = Number(process.env.OPENAI_REQUEST_TIMEOUT_MS || 30000);
       const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
-      const response = await client.chat.completions.create({
-        model: 'gpt-4o',
-        messages: chatMessages,
-        temperature: 0.7,
-        max_tokens: 1000,
-        signal: controller.signal,
-      });
+      // Try preferred model first; fallback for model/access issues
+      const modelCandidates = [
+        process.env.OPENAI_CHAT_MODEL || 'gpt-4o',
+        'gpt-4o-mini'
+      ].filter(Boolean);
+
+      let response;
+      let lastModelErr;
+
+      for (const model of modelCandidates) {
+        try {
+          response = await client.chat.completions.create({
+            model,
+            messages: chatMessages,
+            temperature: 0.7,
+            max_tokens: 1000,
+            signal: controller.signal,
+          });
+          break;
+        } catch (modelErr) {
+          lastModelErr = modelErr;
+          const msg = modelErr?.message?.toLowerCase?.() || '';
+          const status = modelErr?.status;
+          const isModelProblem =
+            msg.includes('model') ||
+            msg.includes('not found') ||
+            msg.includes('does not exist') ||
+            msg.includes('permission') ||
+            msg.includes('access') ||
+            status === 404 ||
+            status === 403;
+
+          if (!isModelProblem) throw modelErr;
+          // Otherwise try next model
+        }
+      }
+
+      if (!response) {
+        throw lastModelErr || new Error('No AI response');
+      }
+
 
       clearTimeout(timeout);
 
